@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: compra-conjunta-teste
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: echo "Sem etapa de build"
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PREVIEW_PASSWORD
+        sync: false
