@@ -1,0 +1,206 @@
+{
+  "users": [
+    {
+      "id": "7fe0cf10-d777-4a43-ad92-e24f041159e2",
+      "name": "Cliente Demonstração",
+      "email": "cliente@demo.local",
+      "salt": "922daefcf0ddcd1153226ce5d879f075",
+      "digest": "5736648e7721d6ef1cf6e0bd737c8c72463b2237ab4dacf8d0fb9cd7198bb5b3a2c9d1c1f65187fe459eb43df3f465f3a9fabcf09574e4d2fdfb17d31120bc53",
+      "roles": [
+        {
+          "role": "customer"
+        }
+      ]
+    },
+    {
+      "id": "2375d9f4-2da4-427c-93c3-4b72fc7a9828",
+      "name": "Administrador da Plataforma",
+      "email": "admin@demo.local",
+      "salt": "0cbd5666cf7e29db1e3eeadcc53f4413",
+      "digest": "b77083b700ab7b9485b7a7884e0640bddf90cd88162d2a67300eef98bcd3f912f3acc119395d492b453cd0e5ab1c8c210a87b8e13d44789bb3675b31e8f434d3",
+      "roles": [
+        {
+          "role": "system_admin"
+        }
+      ]
+    },
+    {
+      "id": "9ed64469-519a-4e12-abfd-a54fab8b46b9",
+      "name": "Gestora da Loja",
+      "email": "loja@demo.local",
+      "salt": "c7364fb541045bc66d99ab5950c45d8b",
+      "digest": "0b3d3d1ce7e5775a31499182ec91bfdf84270d1e4d19f49e1ebd9f816a1aeec509540dff7bd2307dd13cedaf78e3b01aca283a256b5ba53bfb299bd079f48f7e",
+      "roles": [
+        {
+          "role": "customer"
+        },
+        {
+          "role": "store_admin",
+          "storeId": "loja-1"
+        }
+      ]
+    }
+  ],
+  "stores": [
+    {
+      "id": "loja-1",
+      "name": "Mercado Exemplo",
+      "address": "Endereço demonstrativo",
+      "enabled": true
+    },
+    {
+      "id": "loja-2",
+      "name": "Mercearia Modelo",
+      "address": "Endereço demonstrativo",
+      "enabled": true
+    }
+  ],
+  "orders": [
+    {
+      "id": "CC-001",
+      "storeId": "loja-1",
+      "customerId": null,
+      "status": "a_separar",
+      "total": 5990,
+      "items": [
+        {
+          "name": "Arroz 5kg",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "id": "CC-002",
+      "storeId": "loja-2",
+      "customerId": null,
+      "status": "a_separar",
+      "total": 2990,
+      "items": [
+        {
+          "name": "Café 500g",
+          "qty": 1
+        }
+      ]
+    }
+  ],
+  "audit": [
+    {
+      "time": "2026-10-25T19:48:31.525Z",
+      "by": "9ed64469-519a-4e12-abfd-a54fab8b46b9",
+      "action": "chat_message",
+      "entity": "a4a5b724-74a8-4267-915a-475bb19b6a82"
+    },
+    {
+      "time": "2026-10-25T19:48:31.523Z",
+      "by": "9ed64469-519a-4e12-abfd-a54fab8b46b9",
+      "action": "chat_take",
+      "entity": "a4a5b724-74a8-4267-915a-475bb19b6a82"
+    },
+    {
+      "time": "2026-10-25T19:48:31.520Z",
+      "by": "7fe0cf10-d777-4a43-ad92-e24f041159e2",
+      "action": "chat_message",
+      "entity": "a4a5b724-74a8-4267-915a-475bb19b6a82"
+    },
+    {
+      "time": "2026-10-25T19:48:31.515Z",
+      "by": "7fe0cf10-d777-4a43-ad92-e24f041159e2",
+      "action": "chat_opened",
+      "entity": "a4a5b724-74a8-4267-915a-475bb19b6a82"
+    },
+    {
+      "time": "2026-10-25T19:39:00.026Z",
+      "by": "2375d9f4-2da4-427c-93c3-4b72fc7a9828",
+      "action": "rate_scenario_decision",
+      "entity": "c3c23b3f-d9e9-457e-a94c-a500af61c4a3: approved_simulation"
+    },
+    {
+      "time": "2026-10-25T19:39:00.017Z",
+      "by": "2375d9f4-2da4-427c-93c3-4b72fc7a9828",
+      "action": "rate_scenario_created",
+      "entity": "c3c23b3f-d9e9-457e-a94c-a500af61c4a3"
+    }
+  ],
+  "rates": [
+    {
+      "category": "alimentos",
+      "percent": 8
+    },
+    {
+      "category": "limpeza",
+      "percent": 4
+    }
+  ],
+  "products": [],
+  "rateScenarios": [
+    {
+      "id": "c3c23b3f-d9e9-457e-a94c-a500af61c4a3",
+      "title": "Estudo QA",
+      "createdAt": "2026-10-25T19:39:00.017Z",
+      "createdBy": "2375d9f4-2da4-427c-93c3-4b72fc7a9828",
+      "status": "approved_simulation",
+      "rates": {
+        "alimentos": 9,
+        "limpeza": 4,
+        "higiene": 5
+      },
+      "volumes": {
+        "alimentos": 20000000,
+        "limpeza": 12000000,
+        "higiene": 8000000
+      },
+      "currentCents": 2480000,
+      "projectedCents": 2680000,
+      "deltaCents": 200000,
+      "approval": {
+        "by": "2375d9f4-2da4-427c-93c3-4b72fc7a9828",
+        "at": "2026-10-25T19:39:00.026Z",
+        "note": "Aprovado apenas como estudo"
+      },
+      "demo": true
+    }
+  ],
+  "chats": [
+    {
+      "id": "a4a5b724-74a8-4267-915a-475bb19b6a82",
+      "storeId": "loja-1",
+      "customerId": "7fe0cf10-d777-4a43-ad92-e24f041159e2",
+      "customerName": "Cliente Demonstração",
+      "status": "human",
+      "createdAt": "2026-10-25T19:48:31.515Z",
+      "updatedAt": "2026-10-25T19:48:31.525Z",
+      "messages": [
+        {
+          "id": "9187864c-0821-4e5d-a862-af20c2014b97",
+          "by": "bot",
+          "text": "Olá! Sou o atendimento automático demonstrativo da Mercado Exemplo. Posso orientar sobre dúvidas gerais ou encaminhar a um atendente humano.",
+          "at": "2026-10-25T19:48:31.515Z"
+        },
+        {
+          "id": "a08bee12-fa9c-49d3-b34b-a30e6b164788",
+          "by": "customer",
+          "text": "Quero atendimento humano",
+          "at": "2026-10-25T19:48:31.519Z"
+        },
+        {
+          "id": "e8cd3598-e014-4574-a985-0bbd3c5d3201",
+          "by": "bot",
+          "text": "Registrei sua solicitação para atendimento humano. A equipe da loja responderá por aqui durante o horário de atendimento.",
+          "at": "2026-10-25T19:48:31.519Z"
+        },
+        {
+          "id": "6d0d328a-b940-4e60-8e83-f30b3e2bf617",
+          "by": "system",
+          "text": "Um atendente assumiu a conversa.",
+          "at": "2026-10-25T19:48:31.523Z"
+        },
+        {
+          "id": "735d632b-b248-4288-816b-17e9ca033292",
+          "by": "staff",
+          "text": "Vamos verificar seu chamado",
+          "at": "2026-10-25T19:48:31.525Z"
+        }
+      ]
+    }
+  ]
+}
