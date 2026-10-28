@@ -1,1 +1,17 @@
-{"name":"Compra Conjunta","short_name":"Compra Conjunta","start_url":"./","scope":"./","display":"standalone","theme_color":"#155d46","background_color":"#f6f8f5","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml"}]}
+{
+  "name": "Compra Coletiva",
+  "short_name": "Compra Coletiva",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#004B27",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
