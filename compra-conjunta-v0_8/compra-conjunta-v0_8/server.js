@@ -20,13 +20,13 @@ function validPassword(password,user){const h=hash(password,user.salt);return cr
 function addUser(email,password,name,roles){const {salt,digest}=hash(password);const u={id:crypto.randomUUID(),name,email:email.toLowerCase(),salt,digest,roles};db.users.push(u);return u}
 if(!db.users.length){addUser('cliente@demo.local','ClienteDemo2026!','Cliente Demonstração',[{role:'customer'}]);addUser('admin@demo.local','AdminDemo2026!','Administrador da Plataforma',[{role:'system_admin'}]);addUser('loja@demo.local','LojaDemo2026!','Gestora da Loja',[{role:'customer'},{role:'store_admin',storeId:'loja-1'}]);persist()}
 const DEFAULT_CATEGORIES=[
- {id:'alimentos',name:'Alimentos e Bebidas',icon:'🍎',order:1,active:true},
- {id:'limpeza',name:'Higiene e Limpeza',icon:'🧴',order:2,active:true},
- {id:'casa',name:'Casa e Decoração',icon:'🏠',order:3,active:true},
- {id:'eletro',name:'Eletrodomésticos',icon:'💻',order:4,active:true},
- {id:'saude',name:'Saúde e bem-estar',icon:'💚',order:5,active:true}
-];
+ ['alimentos','Alimentos e Bebidas','🍎'],['hortifruti','Hortifrúti','🥬'],['mercearia','Mercearia e Grãos','🍚'],['carnes','Carnes e Aves','🥩'],['padaria','Padaria e Confeitaria','🥖'],['laticinios','Laticínios e Ovos','🥛'],['bebidas','Bebidas','🧃'],['congelados','Congelados','🧊'],['limpeza','Higiene e Limpeza','🧴'],['higiene','Higiene Pessoal','🧼'],['beleza','Beleza e Cuidados','💅'],['casa','Casa e Decoração','🏠'],['eletro','Eletrodomésticos','🔌'],['eletronicos','Eletrônicos e Informática','💻'],['saude','Saúde e Bem-estar','💚'],['pet','Pet Shop','🐾'],['infantil','Infantil e Bebê','🧸'],['moda','Moda e Acessórios','👕'],['papelaria','Papelaria e Escritório','✏️'],['outros','Outros Produtos','📦']
+].map(([id,name,icon],i)=>({id,name,icon,order:i+1,active:true,status:'approved',feePercent:8,source:'system'}));
 if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATEGORIES;persist()}
+// Acrescenta categorias comerciais sem apagar categorias personalizadas existentes.
+let defaultsAdded=false;
+for(const standard of DEFAULT_CATEGORIES){if(!db.categories.some(c=>c.id===standard.id||c.name.toLocaleLowerCase('pt-BR')===standard.name.toLocaleLowerCase('pt-BR'))){db.categories.push(standard);defaultsAdded=true}}
+if(defaultsAdded)persist();
 // Migração não destrutiva: categorias antigas sem taxa recebem o padrão de 8%.
 let categoryMigrated=false;
 for(const c of db.categories){
@@ -34,6 +34,7 @@ for(const c of db.categories){
  if(!c.status){c.status='approved';categoryMigrated=true}
 }
 if(categoryMigrated)persist();
+if(!Array.isArray(db.storeCategories)){db.storeCategories=[];persist()}
 function categoryList(){return db.categories.slice().sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,'pt-BR'))}
 function validCategory(b){return b&&typeof b.name==='string'&&b.name.trim().length>=2&&b.name.trim().length<=50&&typeof b.icon==='string'&&b.icon.length<=12&&Number.isInteger(b.order)&&b.order>=0&&b.order<=9999&&typeof b.active==='boolean'}
 if(!Array.isArray(db.products)){db.products=[];persist()}
@@ -86,7 +87,7 @@ const server=http.createServer(async(req,res)=>{try{
   if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
   const b=await parseBody(req);
   if(!validCategory(b))return reply(res,422,{error:'Confira nome, ícone, ordem e status'});
-  if(db.categories.length>=60)return reply(res,422,{error:'Limite de 60 categorias'});
+  if(db.categories.length>=100)return reply(res,422,{error:'Limite de 100 categorias'});
   if(db.categories.some(c=>c.name.toLocaleLowerCase('pt-BR')===b.name.trim().toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Já existe categoria com esse nome'});
   const c={id:'cat-'+crypto.randomUUID(),name:b.name.trim(),icon:b.icon,order:b.order,active:b.active,status:'approved',feePercent:8,createdBy:u.id,source:'system'};db.categories.push(c);log(u,'category_created',c.id);return reply(res,201,{category:c});
  }
@@ -104,21 +105,44 @@ const server=http.createServer(async(req,res)=>{try{
   if(!Number.isFinite(b.feePercent)||b.feePercent<0||b.feePercent>30||!Number.isInteger(b.feePercent*100))return reply(res,422,{error:'Taxa inválida: use valores de 0% a 30%'});
   Object.assign(c,{name:b.name.trim(),icon:b.icon,order:b.order,active:b.active,status:b.approved===false?'pending':'approved',feePercent:b.feePercent});log(u,'category_updated',c.id);return reply(res,200,{category:c});
  }
- // Lojista solicita nova categoria: taxa fixa inicial de 8%, sujeita à revisão do administrador.
- if(pathname==='/api/store/categories'&&req.method==='POST'){
-  const b=await parseBody(req),storeId=String(b.storeId||'');
-  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso exclusivo ao lojista desta loja'});
-  const name=String(b.name||'').trim(),icon=String(b.icon||'🛒').trim()||'🛒';
-  if(name.length<2||name.length>50||icon.length>12)return reply(res,422,{error:'Nome ou ícone inválido'});
-  if(db.categories.length>=60)return reply(res,422,{error:'Limite de categorias atingido'});
-  if(db.categories.some(c=>c.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Esta categoria já existe ou está aguardando aprovação'});
-  const c={id:'cat-'+crypto.randomUUID(),name,icon,order:db.categories.length+1,active:false,status:'pending',feePercent:8,source:'store',storeId,createdBy:u.id};
-  db.categories.push(c);log(u,'category_submitted',c.id);return reply(res,201,{category:c,message:'Categoria enviada para análise. Taxa inicial: 8%'});
+ // Categorias de loja são privadas por loja; não modificam as categorias globais.
+ if(pathname==='/api/store/categories'&&['GET','POST'].includes(req.method)){
+  const b=req.method==='POST'?await parseBody(req):{};
+  const storeId=String(req.method==='POST'?b.storeId:url.searchParams.get('storeId')||'');
+  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso restrito ao administrador desta loja'});
+  if(req.method==='GET')return reply(res,200,{categories:db.storeCategories.filter(c=>c.storeId===storeId).sort((a,b)=>a.order-b.order)});
+  if(!validCategory(b))return reply(res,422,{error:'Dados de categoria inválidos'});
+  if(db.storeCategories.filter(c=>c.storeId===storeId).length>=100)return reply(res,422,{error:'Limite de 100 categorias por loja'});
+  if(db.storeCategories.some(c=>c.storeId===storeId&&c.name.toLocaleLowerCase('pt-BR')===b.name.trim().toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Categoria já existente nesta loja'});
+  const c={id:'scat-'+crypto.randomUUID(),storeId,name:b.name.trim(),icon:b.icon,order:b.order,active:b.active,feePercent:8,createdBy:u.id,source:'store'};
+  db.storeCategories.push(c);log(u,'store_category_created',c.id);return reply(res,201,{category:c});
  }
- if(pathname==='/api/store/categories'&&req.method==='GET'){
-  const storeId=url.searchParams.get('storeId');
-  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso negado'});
-  return reply(res,200,{categories:categoryList().filter(c=>c.status==='approved'||c.storeId===storeId).map(c=>({id:c.id,name:c.name,status:c.status,feePercent:c.feePercent,source:c.source}))});
+ const storeCat=pathname.match(/^\/api\/store\/categories\/([a-z0-9-]+)$/);
+ if(storeCat&&['PUT','DELETE'].includes(req.method)){
+  const b=await parseBody(req),storeId=String(b.storeId||'');
+  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso restrito ao administrador desta loja'});
+  const c=db.storeCategories.find(x=>x.id===storeCat[1]&&x.storeId===storeId);
+  if(!c)return reply(res,404,{error:'Categoria da loja não encontrada'});
+  if(req.method==='DELETE'){
+   if(db.products.some(x=>x.storeId===storeId&&(x.category===c.id||x.category===c.name)))return reply(res,409,{error:'Categoria possui produtos vinculados'});
+   db.storeCategories=db.storeCategories.filter(x=>x.id!==c.id);log(u,'store_category_deleted',c.id);return reply(res,200,{ok:true});
+  }
+  if(!validCategory(b))return reply(res,422,{error:'Dados inválidos'});
+  if(db.storeCategories.some(x=>x.id!==c.id&&x.storeId===storeId&&x.name.toLocaleLowerCase('pt-BR')===b.name.trim().toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Categoria já existente nesta loja'});
+  Object.assign(c,{name:b.name.trim(),icon:b.icon,order:b.order,active:b.active});
+  log(u,'store_category_updated',c.id);return reply(res,200,{category:c});
+ }
+ if(pathname==='/api/system/store-categories'&&req.method==='GET'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Acesso restrito ao administrador do sistema'});
+  return reply(res,200,{categories:db.storeCategories.map(c=>({...c,storeName:db.stores.find(x=>x.id===c.storeId)?.name||c.storeId}))});
+ }
+ const sysStoreCat=pathname.match(/^\/api\/system\/store-categories\/([a-z0-9-]+)$/);
+ if(sysStoreCat&&req.method==='PUT'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Acesso restrito ao administrador do sistema'});
+  const c=db.storeCategories.find(x=>x.id===sysStoreCat[1]);if(!c)return reply(res,404,{error:'Categoria não encontrada'});
+  const b=await parseBody(req),fee=Number(b.feePercent);
+  if(!Number.isFinite(fee)||fee<0||fee>30||Math.abs(Math.round(fee*100)-fee*100)>1e-7)return reply(res,422,{error:'Taxa inválida (0 a 30%, até duas casas decimais)'});
+  c.feePercent=fee;log(u,'store_category_fee_changed',c.id);return reply(res,200,{category:c});
  }
  // Chat local demonstrativo; não há API de modelo de IA conectada.
  if(pathname==='/api/chat/stores'&&req.method==='GET'){
