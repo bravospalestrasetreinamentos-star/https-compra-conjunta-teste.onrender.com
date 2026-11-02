@@ -11,7 +11,7 @@ function previewAllowed(req){
  if(!header.startsWith('Basic '))return false;
  try{const raw=Buffer.from(header.slice(6),'base64').toString('utf8');const sep=raw.indexOf(':');return sep>=0 && safeEquals(raw.slice(0,sep),'preview') && safeEquals(raw.slice(sep+1),PREVIEW_PASSWORD)}catch{return false}
 }
-const PORT=Number(process.env.PORT||3000), ROOT=__dirname, DB=path.join(ROOT,'data','db.json'), sessions=new Map(), attempts=new Map();
+const PORT=Number(process.env.PORT||3000), ROOT=__dirname, DB=path.join(process.env.CC_DATA_DIR||path.join(ROOT,'data'),'db.json'), sessions=new Map(), attempts=new Map();
 const seed=()=>({users:[],stores:[{id:'loja-1',name:'Mercado Exemplo',address:'Endereço demonstrativo',enabled:true},{id:'loja-2',name:'Mercearia Modelo',address:'Endereço demonstrativo',enabled:true}],orders:[{id:'CC-001',storeId:'loja-1',customerId:null,status:'a_separar',total:5990,items:[{name:'Arroz 5kg',qty:2}]},{id:'CC-002',storeId:'loja-2',customerId:null,status:'a_separar',total:2990,items:[{name:'Café 500g',qty:1}]}],audit:[],rates:[{category:'alimentos',percent:8},{category:'limpeza',percent:4}],products:[]});
 let db=fs.existsSync(DB)?JSON.parse(fs.readFileSync(DB,'utf8')):seed();
 function persist(){fs.mkdirSync(path.dirname(DB),{recursive:true});fs.writeFileSync(DB+'.tmp',JSON.stringify(db,null,2),{mode:0o600});fs.renameSync(DB+'.tmp',DB)}
@@ -19,9 +19,32 @@ function hash(password,salt=crypto.randomBytes(16).toString('hex')){return {salt
 function validPassword(password,user){const h=hash(password,user.salt);return crypto.timingSafeEqual(Buffer.from(h.digest,'hex'),Buffer.from(user.digest,'hex'))}
 function addUser(email,password,name,roles){const {salt,digest}=hash(password);const u={id:crypto.randomUUID(),name,email:email.toLowerCase(),salt,digest,roles};db.users.push(u);return u}
 if(!db.users.length){addUser('cliente@demo.local','ClienteDemo2026!','Cliente Demonstração',[{role:'customer'}]);addUser('admin@demo.local','AdminDemo2026!','Administrador da Plataforma',[{role:'system_admin'}]);addUser('loja@demo.local','LojaDemo2026!','Gestora da Loja',[{role:'customer'},{role:'store_admin',storeId:'loja-1'}]);persist()}
+const DEFAULT_CATEGORIES=[
+ {id:'alimentos',name:'Alimentos e Bebidas',icon:'🍎',order:1,active:true},
+ {id:'limpeza',name:'Higiene e Limpeza',icon:'🧴',order:2,active:true},
+ {id:'casa',name:'Casa e Decoração',icon:'🏠',order:3,active:true},
+ {id:'eletro',name:'Eletrodomésticos',icon:'💻',order:4,active:true},
+ {id:'saude',name:'Saúde e bem-estar',icon:'💚',order:5,active:true}
+];
+if(!Array.isArray(db.categories)){db.categories=DEFAULT_CATEGORIES;persist()}
+// Migração não destrutiva: categorias antigas sem taxa recebem o padrão de 8%.
+let categoryMigrated=false;
+for(const c of db.categories){
+ if(typeof c.feePercent!=='number'){c.feePercent=8;categoryMigrated=true}
+ if(!c.status){c.status='approved';categoryMigrated=true}
+}
+if(categoryMigrated)persist();
+function categoryList(){return db.categories.slice().sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,'pt-BR'))}
+function validCategory(b){return b&&typeof b.name==='string'&&b.name.trim().length>=2&&b.name.trim().length<=50&&typeof b.icon==='string'&&b.icon.length<=12&&Number.isInteger(b.order)&&b.order>=0&&b.order<=9999&&typeof b.active==='boolean'}
 if(!Array.isArray(db.products)){db.products=[];persist()}
 if(!Array.isArray(db.rateScenarios)){db.rateScenarios=[];persist()}
 if(!Array.isArray(db.chats)){db.chats=[];persist()}
+const DEFAULT_BRAND={siteName:'Compra Coletiva',slogan:'Juntos, compramos mais.',layout:'logo_text',logo:'',colors:{primary:'#004B27',secondary:'#55BF00',accent:'#FF7900',background:'#F6F9F4',surface:'#FFFFFF',text:'#173B30'}};
+const COLOR_KEYS=Object.keys(DEFAULT_BRAND.colors);
+function brand(){return {...DEFAULT_BRAND,...(db.brand||{}),colors:{...DEFAULT_BRAND.colors,...(db.brand?.colors||{})}}}
+function isHex(v){return typeof v==='string'&&/^#[0-9a-fA-F]{6}$/.test(v)}
+function luminance(hex){const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722}
+function contrast(a,b){const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
 const chatId=()=>crypto.randomUUID();
 const isCustomer=u=>u?.roles.some(r=>r.role==='customer');
 function triage(message,store){const m=message.toLowerCase();if(/humano|atendente|pessoa|reclama[cç][aã]o|estorno|reembolso|cancelar|cobran[cç]a/.test(m))return {text:'Registrei sua solicitação para atendimento humano. A equipe da loja responderá por aqui durante o horário de atendimento.',handoff:true};if(/hor[aá]rio|aberto|fechado/.test(m))return {text:'Confira o horário diretamente com a loja. Este ambiente de demonstração não possui horários operacionais verificados.',handoff:false};if(/retir|pedido|c[oó]digo/.test(m))return {text:'No Clique e Retire, aguarde o status “Pronto para retirada”. Para consultar um pedido específico, solicite um atendente.',handoff:false};if(/pre[cç]o|dispon[ií]vel|produto|estoque/.test(m))return {text:'Os preços e estoques são definidos pela loja. Consulte o catálogo atualizado ou solicite um atendente para confirmar a disponibilidade.',handoff:false};return {text:'Posso orientar sobre retirada e dúvidas gerais. Para questões específicas ou não resolvidas, selecione “Falar com atendente”.',handoff:false}}
@@ -36,7 +59,9 @@ const originOk=req=>{const origin=req.headers.origin;if(!origin)return true;try{
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost'),pathname=url.pathname;
  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Robots-Tag','noindex, nofollow, noarchive');
- if(!previewAllowed(req)){res.writeHead(401,{'WWW-Authenticate':'Basic realm="Compra Conjunta - Ambiente de Testes", charset="UTF-8"','Cache-Control':'no-store'});res.end('Acesso privado de demonstracao');return} 
+ if(!previewAllowed(req)){res.writeHead(401,{'WWW-Authenticate':'Basic realm="Compra Coletiva - Ambiente de Testes", charset="UTF-8"','Cache-Control':'no-store'});res.end('Acesso privado de demonstracao');return} 
+ if(pathname==='/api/brand'&&req.method==='GET')return reply(res,200,{brand:brand()});
+ if(pathname==='/api/categories'&&req.method==='GET')return reply(res,200,{categories:categoryList().filter(c=>c.active&&c.status==='approved').map(({id,name,icon,order})=>({id,name,icon,order}))});
  if(pathname.startsWith('/api/')){
  const sess=sessions.get(cookies(req).cc_session),u=sess&&db.users.find(x=>x.id===sess.uid);
  if(req.method!=='GET'&&!originOk(req))return reply(res,403,{error:'Origem inválida'});
@@ -53,6 +78,48 @@ const server=http.createServer(async(req,res)=>{try{
  if(pathname==='/api/me'&&req.method==='GET')return reply(res,200,{user:publicUser(u)});
  if(pathname==='/api/logout'&&req.method==='POST'){sessions.delete(cookies(req).cc_session);return reply(res,200,{ok:true},{'Set-Cookie':'cc_session=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0'});}
 
+ if(pathname==='/api/system/categories'&&req.method==='GET'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
+  return reply(res,200,{categories:categoryList()});
+ }
+ if(pathname==='/api/system/categories'&&req.method==='POST'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
+  const b=await parseBody(req);
+  if(!validCategory(b))return reply(res,422,{error:'Confira nome, ícone, ordem e status'});
+  if(db.categories.length>=60)return reply(res,422,{error:'Limite de 60 categorias'});
+  if(db.categories.some(c=>c.name.toLocaleLowerCase('pt-BR')===b.name.trim().toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Já existe categoria com esse nome'});
+  const c={id:'cat-'+crypto.randomUUID(),name:b.name.trim(),icon:b.icon,order:b.order,active:b.active,status:'approved',feePercent:8,createdBy:u.id,source:'system'};db.categories.push(c);log(u,'category_created',c.id);return reply(res,201,{category:c});
+ }
+ const categoryRoute=pathname.match(/^\/api\/system\/categories\/([a-z0-9-]+)$/);
+ if(categoryRoute&&['PUT','DELETE'].includes(req.method)){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
+  const c=db.categories.find(x=>x.id===categoryRoute[1]);if(!c)return reply(res,404,{error:'Categoria não encontrada'});
+  if(req.method==='DELETE'){
+   const count=db.products.filter(x=>x.category===c.id||x.category===c.name).length;
+   if(count)return reply(res,409,{error:'Categoria possui '+count+' produto(s) vinculado(s). Reclassifique-os antes de excluir.'});
+   db.categories=db.categories.filter(x=>x.id!==c.id);log(u,'category_deleted',c.id);return reply(res,200,{ok:true});
+  }
+  const b=await parseBody(req);if(!validCategory(b))return reply(res,422,{error:'Dados da categoria inválidos'});
+  if(db.categories.some(x=>x.id!==c.id&&x.name.toLocaleLowerCase('pt-BR')===b.name.trim().toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Nome já utilizado'});
+  if(!Number.isFinite(b.feePercent)||b.feePercent<0||b.feePercent>30||!Number.isInteger(b.feePercent*100))return reply(res,422,{error:'Taxa inválida: use valores de 0% a 30%'});
+  Object.assign(c,{name:b.name.trim(),icon:b.icon,order:b.order,active:b.active,status:b.approved===false?'pending':'approved',feePercent:b.feePercent});log(u,'category_updated',c.id);return reply(res,200,{category:c});
+ }
+ // Lojista solicita nova categoria: taxa fixa inicial de 8%, sujeita à revisão do administrador.
+ if(pathname==='/api/store/categories'&&req.method==='POST'){
+  const b=await parseBody(req),storeId=String(b.storeId||'');
+  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso exclusivo ao lojista desta loja'});
+  const name=String(b.name||'').trim(),icon=String(b.icon||'🛒').trim()||'🛒';
+  if(name.length<2||name.length>50||icon.length>12)return reply(res,422,{error:'Nome ou ícone inválido'});
+  if(db.categories.length>=60)return reply(res,422,{error:'Limite de categorias atingido'});
+  if(db.categories.some(c=>c.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR')))return reply(res,409,{error:'Esta categoria já existe ou está aguardando aprovação'});
+  const c={id:'cat-'+crypto.randomUUID(),name,icon,order:db.categories.length+1,active:false,status:'pending',feePercent:8,source:'store',storeId,createdBy:u.id};
+  db.categories.push(c);log(u,'category_submitted',c.id);return reply(res,201,{category:c,message:'Categoria enviada para análise. Taxa inicial: 8%'});
+ }
+ if(pathname==='/api/store/categories'&&req.method==='GET'){
+  const storeId=url.searchParams.get('storeId');
+  if(!permitted(u,'store_admin',storeId))return reply(res,403,{error:'Acesso negado'});
+  return reply(res,200,{categories:categoryList().filter(c=>c.status==='approved'||c.storeId===storeId).map(c=>({id:c.id,name:c.name,status:c.status,feePercent:c.feePercent,source:c.source}))});
+ }
  // Chat local demonstrativo; não há API de modelo de IA conectada.
  if(pathname==='/api/chat/stores'&&req.method==='GET'){
   if(!isCustomer(u))return reply(res,403,{error:'Perfil de cliente necessário'});
@@ -98,6 +165,22 @@ const server=http.createServer(async(req,res)=>{try{
    else return reply(res,409,{error:'Ação não permitida neste estado'});
    c.updatedAt=new Date().toISOString();log(u,'chat_'+b.action,c.id);return reply(res,200,{conversation:c});
   }
+ }
+ if(pathname==='/api/system/brand'&&req.method==='PUT'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
+  const b=await parseBody(req),colors=b.colors||{},siteName=String(b.siteName||'').trim(),slogan=String(b.slogan??'').trim(),layout=b.layout;
+  if(siteName.length<2||siteName.length>50||slogan.length>110||!['logo_text','image_only','text_only'].includes(layout)||!COLOR_KEYS.every(k=>isHex(colors[k])))return reply(res,422,{error:'Dados de identidade visual inválidos'});
+  const logo=String(b.logo||'');
+  if(logo && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo)||logo.length>95000))return reply(res,422,{error:'Imagem inválida ou maior que 70 KB. Envie PNG, JPEG ou WEBP otimizado'});
+  if(layout==='image_only'&&!logo)return reply(res,422,{error:'Envie uma logomarca antes de selecionar somente imagem'});
+  if(contrast(colors.primary,'#FFFFFF')<4.5||contrast(colors.text,colors.surface)<4.5||contrast(colors.text,colors.background)<4.5)return reply(res,422,{error:'Contraste insuficiente. Texto deve manter contraste mínimo de 4,5:1'});
+  const old=brand();db.brand={siteName,slogan,layout,logo,colors:Object.fromEntries(COLOR_KEYS.map(k=>[k,colors[k].toUpperCase()])),updatedAt:new Date().toISOString()};
+  db.brandHistory=db.brandHistory||[];db.brandHistory.unshift(old);db.brandHistory=db.brandHistory.slice(0,5);log(u,'brand_updated','Identidade visual e paleta');return reply(res,200,{brand:brand()});
+ }
+ if(pathname==='/api/system/brand/restore'&&req.method==='POST'){
+  if(!permitted(u,'system_admin'))return reply(res,403,{error:'Somente administrador do sistema'});
+  const prev=db.brandHistory?.shift();if(!prev)return reply(res,409,{error:'Não há versão anterior'});
+  db.brandHistory.unshift(brand());db.brand=prev;log(u,'brand_restored','Identidade visual');return reply(res,200,{brand:brand()});
  }
  if(pathname==='/api/customer'&&req.method==='GET')return reply(res,200,{orders:db.orders.filter(o=>o.customerId===u.id),note:'Pedidos legados não estão vinculados a contas'});
  if(pathname==='/api/system'&&req.method==='GET'){if(!permitted(u,'system_admin'))return reply(res,403,{error:'Sem permissão'});return reply(res,200,{users:db.users.map(publicUser),stores:db.stores,ordersCount:db.orders.length,rates:db.rates,audit:db.audit.slice(0,20)})}
@@ -181,4 +264,4 @@ const server=http.createServer(async(req,res)=>{try{
  if(!file.startsWith(path.resolve(ROOT,'public')+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);res.end('Não encontrado');return}
  res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});fs.createReadStream(file).pipe(res);
  }catch(e){reply(res,e.message==='payload_large'?413:400,{error:'Solicitação inválida'})}});
-if(require.main===module)server.listen(PORT,()=>console.log(`Compra Conjunta: http://localhost:${PORT}`));module.exports={server,permitted};
+if(require.main===module)server.listen(PORT,()=>console.log(`Compra Coletiva: http://localhost:${PORT}`));module.exports={server,permitted};
